@@ -1,0 +1,59 @@
+services:
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.164.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "${OTLP_BIND_ADDRESS:-127.0.0.1}:4317:4317"
+      - "${OTLP_BIND_ADDRESS:-127.0.0.1}:4318:4318"
+    depends_on: [prometheus, tempo, loki]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.13.5
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${METRICS_RETENTION:-5y}
+      - --web.enable-otlp-receiver
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus:/prometheus
+    ports:
+      - "${QUERY_BIND_ADDRESS:-127.0.0.1}:9090:9090"
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:3.0.0
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      - tempo:/var/tempo
+    ports:
+      - "${QUERY_BIND_ADDRESS:-127.0.0.1}:3200:3200"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.7.9
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki.yaml:/etc/loki/config.yaml:ro
+      - loki:/loki
+    ports:
+      - "${QUERY_BIND_ADDRESS:-127.0.0.1}:3100:3100"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.3.0
+    profiles: [grafana]
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${QUERY_BIND_ADDRESS:-127.0.0.1}:3000:3000"
+
+volumes:
+  prometheus:
+  tempo:
+  loki:
